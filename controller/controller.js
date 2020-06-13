@@ -1,50 +1,40 @@
-const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
-var db = require('../models/News');
-
-var path = require('path');
+var express = require("express");
 var router = express.Router();
+var path = require("path");
 
-var Note = require('../models/notes.js');
-var News = require('../models/News.js');
+const axios = require('axios');
+var request = require("request");
+var cheerio = require("cheerio");
 
-router.get('/', function (req, res) {
-  res.redirect('/news');
-})
+var Comment = require("../models/Comment.js");
+var News = require("../models/News.js");
 
-router.get('/scrape', function (req, res) {
-  axios.get('http://www.theverge.com').then(function (response) {
-    var $ = cheerio.load(response);
-    var titleArray = [];
+router.get("/", function(req, res) {
+  res.redirect("/articles");
+});
 
-    $('.c-entry-box--compact__title').each(function (i, element) {
-      var results = {};
+router.get("/scrape", function(req, res) {
+  request("http://www.theverge.com", function(error, response, html) {
+    var $ = cheerio.load(html);
+    var titlesArray = [];
 
-      results.title = $(this)
+    $(".c-entry-box--compact__title").each(function(i, element) {
+      var result = {};
+
+      result.title = $(this)
+        .children("a")
         .text();
-      results.link = $(this)
-        .children()
-        .attr('href');
-      // var title = $(element).text();
-      // var link = $(element)
-      //   .children()
-      //   .attr('href');
+      result.link = $(this)
+        .children("a")
+        .attr("href");
 
-      // News.create(results).then(function (dbNews) {
-      //   console.log(dbNews);
-      // }).catch(function (err) {
-      //   console.log(err);
-      // })
+      if (result.title !== "" && result.link !== "") {
+        if (titlesArray.indexOf(result.title) == -1) {
+          titlesArray.push(result.title);
 
-
-      if (results.title !== "" && results.link !== "") {
-        if (titleArray.indexOf(results.title) == -1) {
-          titleArray.push(results.title);
-
-          News.count({ title: results.title }, function(err, test) {
+         News.count({ title: result.title }, function(err, test) {
             if (test === 0) {
-              var entry = new News(results);
+              var entry = new News(result);
 
               entry.save(function(err, doc) {
                 if (err) {
@@ -65,20 +55,20 @@ router.get('/scrape', function (req, res) {
     res.redirect("/");
   });
 });
-router.get("/news", function(req, res) {
+router.get("/articles", function(req, res) {
   News.find()
     .sort({ _id: -1 })
     .exec(function(err, doc) {
       if (err) {
         console.log(err);
       } else {
-        var newsl = { news: doc };
-        res.render("index", newsl);
+        var artcl = { article: doc };
+        res.render("index", artcl);
       }
     });
 });
 
-router.get("/news-json", function(req, res) {
+router.get("/articles-json", function(req, res) {
   News.find({}, function(err, doc) {
     if (err) {
       console.log(err);
@@ -96,34 +86,34 @@ router.get("/clearAll", function(req, res) {
       console.log("removed all articles");
     }
   });
-  res.redirect("/news-json");
+  res.redirect("/articles-json");
 });
 
-router.get("/readNews/:id", function(req, res) {
-  var newsId = req.params.id;
+router.get("/readArticle/:id", function(req, res) {
+  var articleId = req.params.id;
   var hbsObj = {
-    news: [],
+    article: [],
     body: []
   };
 
-  News.findOne({ _id: newsId })
+  News.findOne({ _id: articleId })
     .populate("comment")
     .exec(function(err, doc) {
       if (err) {
         console.log("Error: " + err);
       } else {
-        hbsObj.news = doc;
+        hbsObj.article = doc;
         var link = doc.link;
-        axios.get(link, function(error, response, html) {
+        request(link, function(error, response, html) {
           var $ = cheerio.load(html);
 
           $(".l-col__main").each(function(i, element) {
             hbsObj.body = $(this)
               .children(".c-entry-content")
-              .children("a")
+              .children("p")
               .text();
 
-            res.render("news", hbsObj);
+            res.render("article", hbsObj);
             return false;
           });
         });
@@ -157,7 +147,7 @@ router.post("/comment/:id", function(req, res) {
         if (err) {
           console.log(err);
         } else {
-          res.redirect("/readNews/" + newsId);
+          res.redirect("/readArticle/" + newsId);
         }
       });
     }
